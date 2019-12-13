@@ -1178,6 +1178,27 @@ BOOL isExiting = FALSE;
     return [self.navigationDelegate didStartProvisionalNavigation:theWebView];
 }
 
+- (void)webView:(WKWebView *)theWebView decidePolicyForNavigationResponse:(nonnull WKNavigationResponse *)navigationResponse decisionHandler:(nonnull void (^)(WKNavigationResponsePolicy))decisionHandler
+{
+    NSArray* downloadTypes = @[@"zip", @"rar", @"tar", @"binary"];
+    NSString* mimeType = navigationResponse.response.MIMEType;
+    
+    NSUInteger index = [downloadTypes indexOfObjectPassingTest: ^BOOL(id format, NSUInteger idx, BOOL *stop){
+        return [[mimeType lowercaseString] containsString: [(NSString *)format lowercaseString]];
+    }];
+    if(index == NSNotFound){
+        decisionHandler(WKNavigationActionPolicyAllow);
+    }else{
+        NSURLSession *session = [NSURLSession sharedSession];
+        NSURLSessionDataTask *dataTask = [session dataTaskWithURL:theWebView.URL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{@"type":@"ondownload", @"response": @{ @"filename": response.suggestedFilename, @"mime": response.MIMEType, @"data": [data base64EncodedStringWithOptions :0]}}];
+            [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+            [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
+        }];
+        [dataTask resume];
+        decisionHandler(WKNavigationActionPolicyCancel);
+    }
+}
 - (void)webView:(WKWebView *)theWebView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
 {
     NSURL *url = navigationAction.request.URL;
