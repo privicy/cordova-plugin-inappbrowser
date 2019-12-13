@@ -20,7 +20,6 @@ package org.apache.cordova.inappbrowser;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -30,8 +29,6 @@ import android.provider.Browser;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -76,13 +73,17 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.StringTokenizer;
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -99,6 +100,7 @@ public class InAppBrowser extends CordovaPlugin {
     private static final String LOAD_START_EVENT = "loadstart";
     private static final String LOAD_STOP_EVENT = "loadstop";
     private static final String LOAD_ERROR_EVENT = "loaderror";
+    private static final String DOWNLOAD_FILE_EVENT = "ondownload";
     private static final String MESSAGE_EVENT = "message";
     private static final String CLEAR_ALL_CACHE = "clearcache";
     private static final String CLEAR_SESSION_CACHE = "clearsessioncache";
@@ -1349,7 +1351,7 @@ public class InAppBrowser extends CordovaPlugin {
         @SuppressWarnings("deprecation")
         @Override
         public WebResourceResponse shouldInterceptRequest (final WebView view, String url) {
-            return shouldInterceptRequest(url, super.shouldInterceptRequest(view, url), null);
+            return shouldInterceptRequest(view, url);
         }
 
         /**
@@ -1362,11 +1364,58 @@ public class InAppBrowser extends CordovaPlugin {
         @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            return shouldInterceptRequest(request.getUrl().toString(), super.shouldInterceptRequest(view, request), request.getMethod());
+            try {
+                Uri rawUrl = request.getUrl();
+                URL url = new URL(rawUrl.toString());
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod(request.getMethod());
+                for (Map.Entry<String, String> entry : request.getRequestHeaders().entrySet()) {
+                    connection.setRequestProperty(entry.getKey(), entry.getValue());
+                }
+                connection.connect();
+                boolean handlerSet = setCustomDownloadHandler(connection);
+                if(handlerSet) return null;
+                Map<String, List<String>> responseHeaders = connection.getHeaderFields();
+                Map<String, String> formattedResponseHeaders = new HashMap<String, String>();
+                for (Map.Entry<String, List<String>> entry : responseHeaders.entrySet()) {
+                    String name = entry.getKey();
+                    if (name == null)
+                        continue; // http/1.1 line
+                    formattedResponseHeaders.put(name, entry.getValue().toString());
+                }
+                return new WebResourceResponse(connection.getContentType(), connection.getContentEncoding(), connection.getResponseCode(), connection.getResponseMessage(), formattedResponseHeaders, connection.getInputStream());
+            }catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
 
-        public WebResourceResponse shouldInterceptRequest(String url, WebResourceResponse response, String method){
-            return response;
+        /**
+         * Sets custom download handler.
+         *
+         * @param response
+         * @return boolean
+         */
+
+        private boolean setCustomDownloadHandler(HttpURLConnection response){
+            String[] downloadExt = {"zip", "binary", "tar", "rar"};
+            Boolean match = false;
+            for(int i = 0; i < downloadExt.length; i++){
+                if(response.getContentType().contains(downloadExt[i])){
+                    match = true;
+                    break;
+                }
+            }
+
+            if(!match) return false;
+            HashMap<String, Object> map = new HashMap<String,Object>();
+            map.put("type", "ondownload");
+            map.put("response", new HashMap<String,String>());
+            HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
+            resp.put("mime", response.getContentType());
+            resp.put("filename", "test");
+            resp.put("data", "DATA");
+            sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
+            return true;
         }
 
         /*
