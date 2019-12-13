@@ -1191,9 +1191,10 @@ BOOL isExiting = FALSE;
     }else{
         NSURLSession *session = [NSURLSession sharedSession];
         NSURLSessionDataTask *dataTask = [session dataTaskWithURL:theWebView.URL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{@"type":@"ondownload", @"response": @{ @"filename": response.suggestedFilename, @"mime": response.MIMEType, @"data": [data base64EncodedStringWithOptions :0]}}];
+            // Todo: Send appropriate response to the JS app.            
+            /*CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{@"type":@"ondownload", @"response": @{ @"filename": response.suggestedFilename, @"mime": response.MIMEType, @"data": [data base64EncodedStringWithOptions :0]}}];
             [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
-            [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
+            [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];*/
         }];
         [dataTask resume];
         decisionHandler(WKNavigationActionPolicyCancel);

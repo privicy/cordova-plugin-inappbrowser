@@ -1411,10 +1411,11 @@ public class InAppBrowser extends CordovaPlugin {
             map.put("type", "ondownload");
             map.put("response", new HashMap<String,String>());
             HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
-            resp.put("mime", response.getContentType());
+            // Todo: Send appropriate response to the JS app.
+            /*resp.put("mime", response.getContentType());
             resp.put("filename", "test");
             resp.put("data", "DATA");
-            sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
+            sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);*/
             return true;
         }
 
