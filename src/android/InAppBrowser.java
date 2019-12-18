@@ -20,8 +20,11 @@ package org.apache.cordova.inappbrowser;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Parcelable;
@@ -34,7 +37,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
-import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -48,7 +50,7 @@ import android.webkit.CookieManager;
 import android.webkit.CookieSyncManager;
 import android.webkit.HttpAuthHandler;
 import android.webkit.JavascriptInterface;
-import android.webkit.MimeTypeMap;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -75,25 +77,16 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.StringTokenizer;
-import java.util.UUID;
 
-import javax.net.ssl.HttpsURLConnection;
 
 @SuppressLint("SetJavaScriptEnabled")
 public class InAppBrowser extends CordovaPlugin {
@@ -933,7 +926,6 @@ public class InAppBrowser extends CordovaPlugin {
                 View footerClose = createCloseButton(7);
                 footer.addView(footerClose);
 
-
                 // WebView
                 inAppWebView = new WebView(cordova.getActivity());
                 inAppWebView.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -983,6 +975,18 @@ public class InAppBrowser extends CordovaPlugin {
                 });
                 currentClient = new InAppBrowserClient(thatWebView, edittext, beforeload);
                 inAppWebView.setWebViewClient(currentClient);
+                inAppWebView.setDownloadListener((String url, String userAgent, String contentDisposition, String mimeType, long contentLength)->{
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimeType);
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    request.addRequestHeader("Cookie", cookies);
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    request.setDestinationInExternalFilesDir(cordova.getContext(), null, URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    DownloadManager dm = (DownloadManager) cordova.getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+                    Long descriptor = dm.enqueue(request);
+                    cordova.getContext().registerReceiver(handleDownload(descriptor, contentLength),new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+                });
                 WebSettings settings = inAppWebView.getSettings();
                 settings.setJavaScriptEnabled(true);
                 settings.setJavaScriptCanOpenWindowsAutomatically(true);
@@ -1150,6 +1154,30 @@ public class InAppBrowser extends CordovaPlugin {
             mUploadCallback.onReceiveValue(result);
             mUploadCallback = null;
         }
+    }
+
+    private BroadcastReceiver handleDownload(Long downloadId, Long contentLength){
+        return new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if(downloadId == intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)) {
+                    DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+                    Uri downloadUri = dm.getUriForDownloadedFile(downloadId);
+                    String contentType = dm.getMimeTypeForDownloadedFile(downloadId);
+                    HashMap<String, Object> map = new HashMap<>();
+                    map.put("type", DOWNLOAD_FILE_EVENT);
+                    map.put("response", new HashMap<>());
+                    HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
+                    resp.put("type", contentType);
+                    resp.put("size", Long.toString(contentLength));
+                    if (downloadUri == null)
+                        resp.put("error", "Download failed.");
+                    else
+                        resp.put("savePath", downloadUri.toString());
+                    sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
+                }
+            }
+        };
     }
 
     /**
@@ -1360,7 +1388,7 @@ public class InAppBrowser extends CordovaPlugin {
         @SuppressWarnings("deprecation")
         @Override
         public WebResourceResponse shouldInterceptRequest (final WebView view, String url) {
-            return shouldInterceptRequest(view, url);
+            return shouldInterceptRequest(url, super.shouldInterceptRequest(view, url), null);
         }
 
         /**
@@ -1373,87 +1401,11 @@ public class InAppBrowser extends CordovaPlugin {
         @TargetApi(Build.VERSION_CODES.LOLLIPOP)
         @Override
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-            try {
-                if (!request.getMethod().toUpperCase().equals("GET")) return null;
-                String rawUrl = request.getUrl().toString();
-                URL url = new URL(rawUrl);
-                String cookie = CookieManager.getInstance().getCookie(rawUrl);
-                HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
-                connection.setRequestMethod(request.getMethod());
-                for (Map.Entry<String, String> entry : request.getRequestHeaders().entrySet()) {
-                    connection.setRequestProperty(entry.getKey(), entry.getValue());
-                }
-                connection.setRequestProperty("Cookie", cookie);
-                connection.connect();
-                boolean download = this.handleDownload(connection.getContentType(), connection.getContentLength(), connection.getInputStream());
-                return download ?
-                    new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream("Downloading file...".getBytes()))
-                    :null;
-            }catch (IOException e) {
-               Log.e("Exception caught: ", e.getMessage());
-               return null;
-            }
+            return shouldInterceptRequest(request.getUrl().toString(), super.shouldInterceptRequest(view, request), request.getMethod());
         }
 
-        /**
-         * Takes care of files sent as a result of HTTP Request.
-         *
-         * @param response
-         * @return boolean
-         */
-
-        private boolean handleDownload(String contentType, Integer contentLength, InputStream contentData){
-            String[] downloadExt = {"zip", "binary", "tar", "gz", "rar"};
-            Boolean match = false;
-            for(int i = 0; i < downloadExt.length; i++){
-                if(contentType != null && contentType.contains(downloadExt[i])){
-                    match = true;
-                    break;
-                }
-            }
-            if(!match) return false;
-            HashMap<String, Object> map = new HashMap<>();
-            map.put("type", "ondownload");
-            map.put("response", new HashMap<>());
-            HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
-            resp.put("type", contentType);
-            resp.put("size", Integer.toString(contentLength));
-            try {
-                String path = this.saveResponse(contentType, contentData);
-                resp.put("savePath", path);
-            }catch (IOException e){
-                resp.put("error", e.getMessage());
-            }
-            sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
-            return true;
-        }
-
-        /**
-         * Saves the response stream and returns the path of the file to which stream was saved.
-         *
-         * @param response
-         * @return String
-         * @throws IOException
-         */
-
-        private String saveResponse(String contentType, InputStream contentData) throws IOException {
-            try {
-                String ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentType);
-                String filename = UUID.randomUUID()+"."+ext;
-                File file = new File(cordova.getContext().getFilesDir(), filename);
-                try (OutputStream output = new FileOutputStream(file)) {
-                    byte[] buffer = new byte[4 * 1024];
-                    int read;
-
-                    while ((read = contentData.read(buffer)) != -1) {
-                        output.write(buffer, 0, read);
-                    }
-                    output.flush();
-                }
-                return cordova.getContext().getFilesDir().getAbsolutePath()+"/"+filename;
-            } finally {
-                contentData.close();
-            }
+        public WebResourceResponse shouldInterceptRequest(String url, WebResourceResponse response, String method){
+            return response;
         }
 
         /*
@@ -1492,8 +1444,6 @@ public class InAppBrowser extends CordovaPlugin {
                 LOG.e(LOG_TAG, "URI passed in has caused a JSON error.");
             }
         }
-
-
 
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
