@@ -1178,6 +1178,42 @@ BOOL isExiting = FALSE;
     return [self.navigationDelegate didStartProvisionalNavigation:theWebView];
 }
 
+- (void)webView:(WKWebView *)theWebView decidePolicyForNavigationResponse:(nonnull WKNavigationResponse *)navigationResponse decisionHandler:(nonnull void (^)(WKNavigationResponsePolicy))decisionHandler
+{
+    NSArray* downloadTypes = @[@"zip", @"rar", @"gz", @"tar", @"binary"];
+    NSString* mimeType = navigationResponse.response.MIMEType;
+    NSUInteger filesize = navigationResponse.response.expectedContentLength;
+    
+    NSUInteger index = [downloadTypes indexOfObjectPassingTest: ^BOOL(id format, NSUInteger idx, BOOL *stop){
+        return [[mimeType lowercaseString] containsString: [(NSString *)format lowercaseString]];
+    }];
+    if(index == NSNotFound) {
+        decisionHandler(WKNavigationResponsePolicyAllow);
+        return;
+    };
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *dataTask = [session dataTaskWithURL:theWebView.URL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSString* savePath = [self getDownloadSavePath: response.suggestedFilename];
+        [data writeToFile:savePath atomically:NO];
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{@"type":@"ondownload", @"response": @{ @"savePath": savePath, @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }}];
+        [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+        [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
+        decisionHandler(WKNavigationResponsePolicyCancel);
+    }];
+    [dataTask resume];
+}
+
+- (NSString*)getDownloadSavePath:(NSString*)filename {
+    NSString* libraryPath = [@"~/Library" stringByExpandingTildeInPath];
+    NSString* bundleIdentifier = [[NSBundle mainBundle] bundleIdentifier];
+    NSString* savePath = [NSString stringWithFormat: @"%@/NoCloud/%@/", libraryPath, bundleIdentifier == nil ? @"default": bundleIdentifier];
+    BOOL isDir = YES;
+    if(![NSFileManager.defaultManager fileExistsAtPath:savePath isDirectory: &isDir]){
+        [NSFileManager.defaultManager createDirectoryAtPath:savePath withIntermediateDirectories:YES attributes:nil error: nil];
+    }
+    return [savePath stringByAppendingFormat:@"%@", filename];
+}
+
 - (void)webView:(WKWebView *)theWebView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
 {
     NSURL *url = navigationAction.request.URL;

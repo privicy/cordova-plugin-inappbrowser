@@ -17,11 +17,12 @@
  * specific language governing permissions and limitations
  * under the License.
  *
-*/
+ */
 
 (function () {
     // special patch to correctly work on Ripple emulator (CB-9760)
-    if (window.parent && !!window.parent.ripple) { // https://gist.github.com/triceam/4658021
+    if (window.parent && !!window.parent.ripple) {
+    // https://gist.github.com/triceam/4658021
         module.exports = window.open.bind(window); // fallback to default window.open behaviour
         return;
     }
@@ -33,19 +34,20 @@
 
     function InAppBrowser () {
         this.channels = {
-            'beforeload': channel.create('beforeload'),
-            'loadstart': channel.create('loadstart'),
-            'loadstop': channel.create('loadstop'),
-            'loaderror': channel.create('loaderror'),
-            'exit': channel.create('exit'),
-            'customscheme': channel.create('customscheme'),
-            'message': channel.create('message')
+            beforeload: channel.create('beforeload'),
+            ondownload: channel.create('ondownload'),
+            loadstart: channel.create('loadstart'),
+            loadstop: channel.create('loadstop'),
+            loaderror: channel.create('loaderror'),
+            exit: channel.create('exit'),
+            customscheme: channel.create('customscheme'),
+            message: channel.create('message')
         };
     }
 
     InAppBrowser.prototype = {
         _eventHandler: function (event) {
-            if (event && (event.type in this.channels)) {
+            if (event && event.type in this.channels) {
                 if (event.type === 'beforeload') {
                     this.channels[event.type].fire(event, this._loadAfterBeforeload);
                 } else {
@@ -79,27 +81,48 @@
 
         executeScript: function (injectDetails, cb) {
             if (injectDetails.code) {
-                exec(cb, null, 'InAppBrowser', 'injectScriptCode', [injectDetails.code, !!cb]);
+                exec(cb, null, 'InAppBrowser', 'injectScriptCode', [
+                    injectDetails.code,
+                    !!cb
+                ]);
             } else if (injectDetails.file) {
-                exec(cb, null, 'InAppBrowser', 'injectScriptFile', [injectDetails.file, !!cb]);
+                exec(cb, null, 'InAppBrowser', 'injectScriptFile', [
+                    injectDetails.file,
+                    !!cb
+                ]);
             } else {
-                throw new Error('executeScript requires exactly one of code or file to be specified');
+                throw new Error(
+                    'executeScript requires exactly one of code or file to be specified'
+                );
             }
         },
 
         insertCSS: function (injectDetails, cb) {
             if (injectDetails.code) {
-                exec(cb, null, 'InAppBrowser', 'injectStyleCode', [injectDetails.code, !!cb]);
+                exec(cb, null, 'InAppBrowser', 'injectStyleCode', [
+                    injectDetails.code,
+                    !!cb
+                ]);
             } else if (injectDetails.file) {
-                exec(cb, null, 'InAppBrowser', 'injectStyleFile', [injectDetails.file, !!cb]);
+                exec(cb, null, 'InAppBrowser', 'injectStyleFile', [
+                    injectDetails.file,
+                    !!cb
+                ]);
             } else {
-                throw new Error('insertCSS requires exactly one of code or file to be specified');
+                throw new Error(
+                    'insertCSS requires exactly one of code or file to be specified'
+                );
             }
         }
     };
 
-    module.exports = function (strUrl, strWindowName, strWindowFeatures, callbacks) {
-        // Don't catch calls that write to existing frames (e.g. named iframes).
+    module.exports = function (
+        strUrl,
+        strWindowName,
+        strWindowFeatures,
+        callbacks
+    ) {
+    // Don't catch calls that write to existing frames (e.g. named iframes).
         if (window.frames && window.frames[strWindowName]) {
             var origOpenFunc = modulemapper.getOriginalSymbol(window, 'open');
             return origOpenFunc.apply(window, arguments);
@@ -119,7 +142,11 @@
 
         strWindowFeatures = strWindowFeatures || '';
 
-        exec(cb, cb, 'InAppBrowser', 'open', [strUrl, strWindowName, strWindowFeatures]);
+        exec(cb, cb, 'InAppBrowser', 'open', [
+            strUrl,
+            strWindowName,
+            strWindowFeatures
+        ]);
         return iab;
     };
 })();

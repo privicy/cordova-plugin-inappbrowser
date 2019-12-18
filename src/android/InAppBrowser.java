@@ -20,9 +20,11 @@ package org.apache.cordova.inappbrowser;
 
 import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
-import android.content.ComponentName;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Parcelable;
@@ -30,8 +32,6 @@ import android.provider.Browser;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
-import android.graphics.PorterDuff;
-import android.graphics.PorterDuffColorFilter;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -50,6 +50,7 @@ import android.webkit.CookieManager;
 import android.webkit.CookieSyncManager;
 import android.webkit.HttpAuthHandler;
 import android.webkit.JavascriptInterface;
+import android.webkit.URLUtil;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -76,6 +77,7 @@ import org.apache.cordova.PluginResult;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -84,6 +86,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.HashMap;
 import java.util.StringTokenizer;
+
 
 @SuppressLint("SetJavaScriptEnabled")
 public class InAppBrowser extends CordovaPlugin {
@@ -99,6 +102,7 @@ public class InAppBrowser extends CordovaPlugin {
     private static final String LOAD_START_EVENT = "loadstart";
     private static final String LOAD_STOP_EVENT = "loadstop";
     private static final String LOAD_ERROR_EVENT = "loaderror";
+    private static final String DOWNLOAD_FILE_EVENT = "ondownload";
     private static final String MESSAGE_EVENT = "message";
     private static final String CLEAR_ALL_CACHE = "clearcache";
     private static final String CLEAR_SESSION_CACHE = "clearsessioncache";
@@ -922,7 +926,6 @@ public class InAppBrowser extends CordovaPlugin {
                 View footerClose = createCloseButton(7);
                 footer.addView(footerClose);
 
-
                 // WebView
                 inAppWebView = new WebView(cordova.getActivity());
                 inAppWebView.setLayoutParams(new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -972,6 +975,18 @@ public class InAppBrowser extends CordovaPlugin {
                 });
                 currentClient = new InAppBrowserClient(thatWebView, edittext, beforeload);
                 inAppWebView.setWebViewClient(currentClient);
+                inAppWebView.setDownloadListener((String url, String userAgent, String contentDisposition, String mimeType, long contentLength)->{
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimeType);
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    request.addRequestHeader("Cookie", cookies);
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    request.setDestinationInExternalFilesDir(cordova.getContext(), null, URLUtil.guessFileName(url, contentDisposition, mimeType));
+                    DownloadManager dm = (DownloadManager) cordova.getContext().getSystemService(Context.DOWNLOAD_SERVICE);
+                    Long descriptor = dm.enqueue(request);
+                    cordova.getContext().registerReceiver(handleDownload(descriptor, contentLength),new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+                });
                 WebSettings settings = inAppWebView.getSettings();
                 settings.setJavaScriptEnabled(true);
                 settings.setJavaScriptCanOpenWindowsAutomatically(true);
@@ -1139,6 +1154,30 @@ public class InAppBrowser extends CordovaPlugin {
             mUploadCallback.onReceiveValue(result);
             mUploadCallback = null;
         }
+    }
+
+    private BroadcastReceiver handleDownload(Long downloadId, Long contentLength){
+        return new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                if(downloadId == intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)) {
+                    DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
+                    Uri downloadUri = dm.getUriForDownloadedFile(downloadId);
+                    String contentType = dm.getMimeTypeForDownloadedFile(downloadId);
+                    HashMap<String, Object> map = new HashMap<>();
+                    map.put("type", DOWNLOAD_FILE_EVENT);
+                    map.put("response", new HashMap<>());
+                    HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
+                    resp.put("type", contentType);
+                    resp.put("size", Long.toString(contentLength));
+                    if (downloadUri == null)
+                        resp.put("error", "Download failed.");
+                    else
+                        resp.put("savePath", downloadUri.toString());
+                    sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
+                }
+            }
+        };
     }
 
     /**
@@ -1405,8 +1444,6 @@ public class InAppBrowser extends CordovaPlugin {
                 LOG.e(LOG_TAG, "URI passed in has caused a JSON error.");
             }
         }
-
-
 
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
