@@ -96,6 +96,7 @@ static CDVWKInAppBrowser* instance = nil;
 
 - (void)open:(CDVInvokedUrlCommand*)command
 {
+    NSLog(@"Opening wkwebview.");
     CDVPluginResult* pluginResult;
     
     NSString* url = [command argumentAtIndex:0];
@@ -1191,14 +1192,17 @@ BOOL isExiting = FALSE;
         decisionHandler(WKNavigationResponsePolicyAllow);
         return;
     };
+    NSLog(@"Download captured.");
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *dataTask = [session dataTaskWithURL:theWebView.URL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         NSString* savePath = [self getDownloadSavePath: response.suggestedFilename];
         [data writeToFile:savePath atomically:NO];
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:@{@"type":@"ondownload", @"response": @{ @"savePath": savePath, @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }}];
+        NSDictionary* message = @{@"type":@"ondownload", @"response": @{ @"savePath": savePath, @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }};
+        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
         decisionHandler(WKNavigationResponsePolicyCancel);
+        NSLog(@"Download details: %@", message);
     }];
     [dataTask resume];
 }
