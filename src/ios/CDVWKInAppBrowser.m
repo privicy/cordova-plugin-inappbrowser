@@ -1189,7 +1189,7 @@ BOOL isExiting = FALSE;
         return [[mimeType lowercaseString] containsString: [(NSString *)format lowercaseString]];
     }];
     if(index == NSNotFound) {
-        decisionHandler(WKNavigationResponsePolicyAllow);
+        decisionHandler(WKNavigationActionPolicyAllow);
         return;
     };
     NSLog(@"Download captured.");
@@ -1201,7 +1201,7 @@ BOOL isExiting = FALSE;
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
-        decisionHandler(WKNavigationResponsePolicyCancel);
+        decisionHandler(WKNavigationActionPolicyCancel);
         NSLog(@"Download details: %@", message);
     }];
     [dataTask resume];
