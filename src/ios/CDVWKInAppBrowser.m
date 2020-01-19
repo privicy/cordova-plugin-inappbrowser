@@ -1196,8 +1196,9 @@ BOOL isExiting = FALSE;
     NSLog(@"Download captured.");
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDownloadTask *downloadTask = [session downloadTaskWithURL:(NSURL *)theWebView.URL completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        NSError *transferError;
         NSString* savePath = [self getDownloadSavePath: response.suggestedFilename];
-        [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL URLWithString:savePath] error:NULL];
+        [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:savePath] error:&transferError];
         NSDictionary* message = @{@"type":@"ondownload", @"response": @{ @"savePath": savePath, @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }};
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
