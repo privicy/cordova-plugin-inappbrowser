@@ -27,6 +27,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.database.Cursor;
 import android.os.Parcelable;
 import android.provider.Browser;
 import android.content.res.Resources;
@@ -985,7 +986,7 @@ public class InAppBrowser extends CordovaPlugin {
                     request.setDestinationInExternalFilesDir(cordova.getContext(), null, URLUtil.guessFileName(url, contentDisposition, mimeType));
                     DownloadManager dm = (DownloadManager) cordova.getContext().getSystemService(Context.DOWNLOAD_SERVICE);
                     Long descriptor = dm.enqueue(request);
-                    cordova.getContext().registerReceiver(handleDownload(descriptor, contentLength),new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+                    cordova.getContext().registerReceiver(handleDownload(descriptor, contentLength, mimeType),new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
                 });
                 WebSettings settings = inAppWebView.getSettings();
                 settings.setJavaScriptEnabled(true);
@@ -1156,24 +1157,26 @@ public class InAppBrowser extends CordovaPlugin {
         }
     }
 
-    private BroadcastReceiver handleDownload(Long downloadId, Long contentLength){
+    private BroadcastReceiver handleDownload(Long downloadId, Long contentLength, String contentType){
         return new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if(downloadId == intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)) {
                     DownloadManager dm = (DownloadManager) context.getSystemService(Context.DOWNLOAD_SERVICE);
-                    Uri downloadUri = dm.getUriForDownloadedFile(downloadId);
-                    String contentType = dm.getMimeTypeForDownloadedFile(downloadId);
+                    Cursor cursor = dm.query(new DownloadManager.Query().setFilterById(downloadId));
+                    int columnIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI);
+                    cursor.moveToFirst();
+                    String savePath = cursor.getString(columnIndex);
                     HashMap<String, Object> map = new HashMap<>();
                     map.put("type", DOWNLOAD_FILE_EVENT);
                     map.put("response", new HashMap<>());
                     HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
                     resp.put("type", contentType);
                     resp.put("size", Long.toString(contentLength));
-                    if (downloadUri == null)
+                    if (savePath == null)
                         resp.put("error", "Download failed.");
                     else
-                        resp.put("savePath", downloadUri.toString());
+                        resp.put("savePath", savePath);
                     sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
                 }
             }
