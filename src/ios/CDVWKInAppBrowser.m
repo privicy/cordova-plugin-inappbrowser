@@ -1189,22 +1189,22 @@ BOOL isExiting = FALSE;
         return [[mimeType lowercaseString] containsString: [(NSString *)format lowercaseString]];
     }];
     if(index == NSNotFound) {
-        decisionHandler(WKNavigationActionPolicyAllow);
+        decisionHandler(WKNavigationResponsePolicyAllow);
         return;
     };
+    decisionHandler(WKNavigationResponsePolicyCancel);
     NSLog(@"Download captured.");
     NSURLSession *session = [NSURLSession sharedSession];
-    NSURLSessionDataTask *dataTask = [session dataTaskWithURL:theWebView.URL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    NSURLSessionDownloadTask *downloadTask = [session downloadTaskWithURL:(NSURL *)theWebView.URL completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSString* savePath = [self getDownloadSavePath: response.suggestedFilename];
-        [data writeToFile:savePath atomically:NO];
+        [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL URLWithString:savePath] error:NULL];
         NSDictionary* message = @{@"type":@"ondownload", @"response": @{ @"savePath": savePath, @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }};
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
-        decisionHandler(WKNavigationActionPolicyCancel);
         NSLog(@"Download details: %@", message);
     }];
-    [dataTask resume];
+    [downloadTask resume];
 }
 
 - (NSString*)getDownloadSavePath:(NSString*)filename {
