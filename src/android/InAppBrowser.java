@@ -79,9 +79,14 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -1173,14 +1178,33 @@ public class InAppBrowser extends CordovaPlugin {
                     HashMap<String, String> resp = (HashMap<String, String>) map.get("response");
                     resp.put("type", contentType);
                     resp.put("size", Long.toString(contentLength));
-                    if (savePath == null)
-                        resp.put("error", "Download failed.");
-                    else
-                        resp.put("savePath", savePath);
+                    try {
+                        String path = moveFile(new File(savePath.replaceAll("file://", "")), context.getFilesDir());
+                        resp.put("savePath", "file://"+path);
+                    }catch (Exception e){
+                        resp.put("error", "Error occurred while moving the file.");
+                    }
                     sendUpdate(new JSONObject(map), true, PluginResult.Status.OK);
                 }
             }
         };
+    }
+
+    private String moveFile(File file, File dir) throws IOException {
+        File newFile = new File(dir, file.getName());
+        FileChannel outputChannel = null;
+        FileChannel inputChannel = null;
+        try {
+            outputChannel = new FileOutputStream(newFile).getChannel();
+            inputChannel = new FileInputStream(file).getChannel();
+            inputChannel.transferTo(0, inputChannel.size(), outputChannel);
+            inputChannel.close();
+            file.delete();
+            return newFile.getAbsolutePath();
+        } finally {
+            if (inputChannel != null) inputChannel.close();
+            if (outputChannel != null) outputChannel.close();
+        }
     }
 
     /**
