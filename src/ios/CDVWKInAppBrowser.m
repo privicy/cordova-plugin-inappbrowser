@@ -1183,7 +1183,6 @@ BOOL isExiting = FALSE;
 {
     NSArray* downloadTypes = @[@"zip", @"rar", @"gz", @"tar", @"binary"];
     NSString* mimeType = navigationResponse.response.MIMEType;
-    NSUInteger filesize = navigationResponse.response.expectedContentLength;
     
     NSUInteger index = [downloadTypes indexOfObjectPassingTest: ^BOOL(id format, NSUInteger idx, BOOL *stop){
         return [[mimeType lowercaseString] containsString: [(NSString *)format lowercaseString]];
@@ -1194,12 +1193,34 @@ BOOL isExiting = FALSE;
     };
     decisionHandler(WKNavigationResponsePolicyCancel);
     NSLog(@"Download captured.");
-    NSURLSession *session = [NSURLSession sharedSession];
-    NSURLSessionDownloadTask *downloadTask = [session downloadTaskWithURL:(NSURL *)theWebView.URL completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    
+    //stackoverflow.com/questions/39772007/wkwebview-persistent-storage-of-cookies
+    if (@available(iOS 11.0, *)) {
+        [theWebView.configuration.websiteDataStore.httpCookieStore getAllCookies:^(NSArray<NSHTTPCookie *> *cookies) {
+            NSMutableString *stringifiedCookies = [NSMutableString stringWithCapacity:1];
+            for(NSHTTPCookie *cookie in cookies){
+                if([theWebView.URL.host containsString:cookie.domain]){
+                    [stringifiedCookies appendFormat:@"%@=%@;", cookie.name, cookie.value];
+                }
+            }
+            NSDictionary *headers = @{@"Cookie": stringifiedCookies};
+            NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration ephemeralSessionConfiguration];
+            [sessionConfig setHTTPAdditionalHeaders:headers];
+            NSURLSession *session = [NSURLSession sessionWithConfiguration: sessionConfig];
+            [self initiateDownload:session downloadURL:navigationResponse.response.URL];
+        }];
+    }else{
+        NSURLSession *session = [NSURLSession sharedSession];
+        [self initiateDownload:session downloadURL:navigationResponse.response.URL];
+    }
+}
+
+- (void)initiateDownload:(NSURLSession *)session downloadURL: (NSURL *)url {
+    NSURLSessionDownloadTask *downloadTask = [session downloadTaskWithURL:(NSURL *)url completionHandler:^(NSURL * _Nullable location, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         NSError *transferError;
         NSString* savePath = [self getDownloadSavePath: response.suggestedFilename];
         [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:savePath] error:&transferError];
-        NSDictionary* message = @{@"type":@"ondownload", @"response": @{ @"savePath": [@"file://" stringByAppendingString: savePath], @"error": error == nil ? @"":error.localizedDescription, @"type": mimeType, @"size": @(filesize) }};
+        NSDictionary* message = @{@"type":@"ondownload", @"response": @{ @"savePath": [@"file://" stringByAppendingString: savePath], @"error": error == nil ? @"":error.localizedDescription, @"type": response.MIMEType, @"size": @(response.expectedContentLength) }};
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:message];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
         [self.navigationDelegate.commandDelegate sendPluginResult:pluginResult callbackId:self.navigationDelegate.callbackId];
