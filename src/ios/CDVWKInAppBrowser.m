@@ -590,7 +590,7 @@ static CDVWKInAppBrowser* instance = nil;
             [theWebView loadRequest:navigationAction.request];
             decisionHandler(WKNavigationActionPolicyCancel);
         }else{
-            decisionHandler(WKNavigationActionPolicyAllow);
+            decisionHandler(WKNavigationActionPolicyAllow+2);
         }
     }else{
         decisionHandler(WKNavigationActionPolicyCancel);
