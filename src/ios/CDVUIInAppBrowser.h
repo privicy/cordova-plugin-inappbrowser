@@ -17,7 +17,7 @@
  under the License.
  */
 
-#if !WK_WEB_VIEW_ONLY
+#if USE_UI_WEB_VIEW
 
 #import <Cordova/CDVPlugin.h>
 #import <Cordova/CDVInvokedUrlCommand.h>

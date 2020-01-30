@@ -17,9 +17,11 @@
  under the License.
  */
 
+#define    WK_WEB_VIEW_ONLY 1
+
 #import "CDVInAppBrowser.h"
 #import "CDVInAppBrowserOptions.h"
-#if !WK_WEB_VIEW_ONLY
+#if USE_UI_WEB_VIEW
 #import "CDVUIInAppBrowser.h"
 #endif
 #import "CDVWKInAppBrowser.h"

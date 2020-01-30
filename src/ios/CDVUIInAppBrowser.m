@@ -17,7 +17,7 @@
  under the License.
  */
 
-#if !WK_WEB_VIEW_ONLY
+#if USE_UI_WEB_VIEW
 
 #import "CDVUIInAppBrowser.h"
 #import <Cordova/CDVPluginResult.h>

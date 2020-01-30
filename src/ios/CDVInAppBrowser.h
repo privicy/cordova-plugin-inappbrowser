@@ -17,8 +17,6 @@
  under the License.
  */
 
-#define WK_WEB_VIEW_ONLY 1
-
 #import <Cordova/CDVPlugin.h>
 #import <Cordova/CDVInvokedUrlCommand.h>
 
