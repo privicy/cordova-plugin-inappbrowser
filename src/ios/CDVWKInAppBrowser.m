@@ -1101,7 +1101,7 @@ BOOL isExiting = FALSE;
         __weak CDVWKInAppBrowserViewController* weakSelf = self;
         [CDVUserAgentUtil acquireLock:^(NSInteger lockToken) {
             _userAgentLockToken = lockToken;
-            [CDVUserAgentUtil setUserAgent:_userAgent lockToken:lockToken];
+            [self.webView setCustomUserAgent:_userAgent];
             [weakSelf.webView loadRequest:request];
         }];
     }
