@@ -427,13 +427,8 @@ static CDVWKInAppBrowser* instance = nil;
     [self evaluateJavaScript: [NSString stringWithFormat:@"(function(w){if(!w._cdvMessageHandler) {w._cdvMessageHandler = function(id,d){w.webkit.messageHandlers.%@.postMessage({d:d, id:id});}}})(window)", IAB_BRIDGE_NAME]];
     
     if (jsWrapper != nil) {
-        NSData* jsonData = [NSJSONSerialization dataWithJSONObject:@[source] options:0 error:nil];
-        NSString* sourceArrayString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-        if (sourceArrayString) {
-            NSString* sourceString = [sourceArrayString substringWithRange:NSMakeRange(1, [sourceArrayString length] - 2)];
-            NSString* jsToInject = [NSString stringWithFormat:jsWrapper, sourceString];
-            [self evaluateJavaScript:jsToInject];
-        }
+        NSString* jsToInject = [NSString stringWithFormat:jsWrapper, source];
+        [self evaluateJavaScript:jsToInject];
     } else {
         [self evaluateJavaScript:source];
     }
