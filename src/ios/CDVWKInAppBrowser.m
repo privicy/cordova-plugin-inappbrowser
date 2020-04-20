@@ -459,7 +459,7 @@ static CDVWKInAppBrowser* instance = nil;
     NSString* jsWrapper = nil;
     
     if ((command.callbackId != nil) && ![command.callbackId isEqualToString:@"INVALID"]) {
-        jsWrapper = [NSString stringWithFormat:@"_cdvMessageHandler('%@',JSON.stringify([eval(%%@)]));", command.callbackId];
+        jsWrapper = [NSString stringWithFormat:@"(function(){ const result = %%@;_cdvMessageHandler('%@',JSON.stringify([result]))}();", command.callbackId];
     }
     [self injectDeferredObject:[command argumentAtIndex:0] withWrapper:jsWrapper];
 }
